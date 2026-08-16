@@ -135,21 +135,45 @@ def _render_meta(items: dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_chat(messages: list[dict], index_status: str) -> None:
-    st.markdown('<div class="rm-section-title">Chat</div>', unsafe_allow_html=True)
+def render_chat(
+    messages: list[dict],
+    index_status: str,
+) -> tuple[bool, int | None, int | None]:
+    """Render the Chat workspace.
+
+    Returns (clear_clicked, selected_message_index, selected_source_index).
+    """
+
+    title_col, clear_col = st.columns(
+        [0.7, 0.3], gap="medium", vertical_alignment="center"
+    )
+    with title_col:
+        st.markdown(
+            '<div class="rm-section-title">Chat</div>', unsafe_allow_html=True
+        )
+    with clear_col:
+        clear_clicked = st.button(
+            "Clear conversation",
+            key="clear_conversation",
+            disabled=(not messages or index_status != "indexed"),
+            width="stretch",
+        )
 
     if index_status != "indexed":
         st.markdown(
             '<div class="rm-muted">Index a repository to start asking questions.</div>',
             unsafe_allow_html=True,
         )
-        return
+        return clear_clicked, None, None
 
     if not messages:
         render_empty_state()
-        return
+        return clear_clicked, None, None
 
-    for message in messages:
+    clicked_message = None
+    clicked_source = None
+
+    for message_index, message in enumerate(messages):
         role = message.get("role")
         body = _render_body(message.get("content", ""))
         if role == "user":
@@ -160,7 +184,10 @@ def render_chat(messages: list[dict], index_status: str) -> None:
                 "</div>",
                 unsafe_allow_html=True,
             )
-        elif message.get("refusal"):
+            continue
+
+        # assistant message
+        if message.get("refusal"):
             render_refusal_state()
         elif message.get("error"):
             st.markdown(
@@ -171,18 +198,29 @@ def render_chat(messages: list[dict], index_status: str) -> None:
                 unsafe_allow_html=True,
             )
         else:
-            citations = "".join(
-                f'<span class="rm-citation">[{i}]</span>'
-                for i in range(1, len(message.get("sources", [])) + 1)
-            )
             st.markdown(
                 '<div class="rm-msg">'
                 '<div class="rm-msg-label">RepoMind</div>'
                 f'<div class="rm-msg-body">{body}</div>'
-                f'<div class="rm-citations">{citations}</div>'
                 "</div>",
                 unsafe_allow_html=True,
             )
+
+        # Source selector: "Source N" matches [Source N] in the answer.
+        sources = message.get("sources", [])
+        if sources:
+            source_cols = st.columns(len(sources))
+            for source_index, source_col in enumerate(source_cols):
+                with source_col:
+                    if st.button(
+                        f"Source {source_index + 1}",
+                        key=f"src_{message_index}_{source_index}",
+                        width="stretch",
+                    ):
+                        clicked_message = message_index
+                        clicked_source = source_index
+
+    return clear_clicked, clicked_message, clicked_source
 
 
 def render_empty_state() -> None:
@@ -207,23 +245,53 @@ def render_empty_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_source_inspector(sources: list[dict]) -> None:
+def render_source_inspector(
+    messages: list[dict],
+    selected_message_index: int | None,
+    selected_source_index: int | None = None,
+) -> None:
     st.markdown('<div class="rm-section-title">Sources</div>', unsafe_allow_html=True)
 
-    if not sources:
+    selected = None
+    question = None
+    if selected_message_index is not None and 0 <= selected_message_index < len(
+        messages
+    ):
+        selected = messages[selected_message_index]
+        # The user question that precedes this assistant answer.
+        for candidate in reversed(messages[: selected_message_index + 1]):
+            if candidate.get("role") == "user":
+                question = candidate.get("content", "")
+                break
+
+    if selected is None or not selected.get("sources"):
         st.markdown(
             '<div class="rm-muted">No sources for this message.</div>',
             unsafe_allow_html=True,
         )
         return
 
-    for result in sources:
-        render_source_item(result)
+    if question:
+        st.markdown(
+            f'<div class="rm-caption">For: {html.escape(question)}</div>',
+            unsafe_allow_html=True,
+        )
 
-    render_retrieval_debug(sources)
+    for index, result in enumerate(selected["sources"], start=1):
+        render_source_item(
+            result,
+            source_number=index,
+            selected=(index - 1 == selected_source_index),
+        )
+
+    render_retrieval_debug(selected["sources"])
 
 
-def render_source_item(result: dict) -> None:
+def render_source_item(
+    result: dict,
+    source_number: int | None = None,
+    selected: bool = False,
+) -> None:
     metadata = result.get("metadata", {})
     path = metadata.get("path", "N/A")
     qualified_name = metadata.get("qualified_name")
@@ -232,14 +300,21 @@ def render_source_item(result: dict) -> None:
     end_line = metadata.get("end_line", "?")
     language = "markdown" if str(path).endswith(".md") else "python"
 
+    number_html = ""
+    if source_number is not None:
+        number_html = f'<div class="rm-source-number">Source {source_number}</div>'
+
     symbol_html = ""
     if qualified_name:
         symbol_html = (
             f'<div class="rm-source-symbol">{html.escape(qualified_name)}</div>'
         )
 
+    css_class = "rm-source rm-source-selected" if selected else "rm-source"
+
     st.markdown(
-        '<div class="rm-source">'
+        f'<div class="{css_class}">'
+        f"{number_html}"
         f'<div class="rm-source-file">{html.escape(path)}</div>'
         f"{symbol_html}"
         f'<div class="rm-source-meta">'
@@ -247,7 +322,7 @@ def render_source_item(result: dict) -> None:
         "</div></div>",
         unsafe_allow_html=True,
     )
-    with st.expander("View source"):
+    with st.expander("View source", expanded=selected):
         st.code(result.get("document", ""), language=language)
 
 

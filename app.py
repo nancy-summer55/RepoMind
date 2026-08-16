@@ -1,10 +1,8 @@
-"""RepoMind - Streamlit UI, Phase 3: real RAG chat.
+"""RepoMind - Streamlit UI, Phase 4: source inspection and demo hardening.
 
-The Repository panel runs the real index and the Chat workspace now
-calls the real pipeline:
-
-    question -> rag() -> answer + search_results
-                     -> Chat + Sources + Retrieval Debug
+Chat runs the real pipeline (question -> rag() -> answer + search_results).
+Phase 4 adds: citation/source linking, per-answer inspector history sync,
+a Clear conversation action, and real RRF rank metadata.
 
 No retrieval algorithm was changed. DeepSeek is only called through
 repo_rag.rag(); the embedding model stays cached per process.
@@ -78,6 +76,8 @@ if "current_retrieval_results" not in st.session_state:
     st.session_state.current_retrieval_results = []
 if "selected_message_index" not in st.session_state:
     st.session_state.selected_message_index = None
+if "selected_source_index" not in st.session_state:
+    st.session_state.selected_source_index = None
 
 # ---------------------------------------------------------------------------
 # Refusal detection
@@ -94,6 +94,10 @@ _REFUSAL_MARKERS = (
     "not mentioned",
     "not discussed",
     "not present",
+    "there is no",
+    "does not exist",
+    "is not defined",
+    "cannot be found",
     "does not contain",
     "not enough information",
     "not found in the provided",
@@ -177,6 +181,7 @@ def run_index(path: str) -> None:
         st.session_state.current_sources = []
         st.session_state.current_retrieval_results = []
         st.session_state.selected_message_index = None
+        st.session_state.selected_source_index = None
 
     except ValueError as error:
         st.session_state.index_error = str(error)
@@ -218,6 +223,7 @@ def ask(prompt: str) -> None:
         st.session_state.current_sources = search_results
         st.session_state.current_retrieval_results = search_results
         st.session_state.selected_message_index = len(st.session_state.messages) - 1
+        st.session_state.selected_source_index = None
 
     except Exception:
         st.session_state.messages.append(
@@ -234,6 +240,16 @@ def ask(prompt: str) -> None:
         st.session_state.current_sources = []
         st.session_state.current_retrieval_results = []
         st.session_state.selected_message_index = len(st.session_state.messages) - 1
+        st.session_state.selected_source_index = None
+
+
+def clear_conversation() -> None:
+    """Clear only the chat; the repository index stays intact."""
+    st.session_state.messages = []
+    st.session_state.current_sources = []
+    st.session_state.current_retrieval_results = []
+    st.session_state.selected_message_index = None
+    st.session_state.selected_source_index = None
 
 
 # ---------------------------------------------------------------------------
@@ -272,10 +288,17 @@ with repo_col:
         st.rerun()
 
 with chat_col:
-    components.render_chat(
+    clear_clicked, clicked_message, clicked_source = components.render_chat(
         messages=st.session_state.messages,
         index_status=st.session_state.index_status,
     )
+    if clear_clicked:
+        clear_conversation()
+        st.rerun()
+    if clicked_message is not None:
+        st.session_state.selected_message_index = clicked_message
+        st.session_state.selected_source_index = clicked_source
+        st.rerun()
     prompt = st.chat_input(
         "Ask about this repository...",
         disabled=(st.session_state.index_status != "indexed"),
@@ -286,5 +309,7 @@ with chat_col:
 
 with inspector_col:
     components.render_source_inspector(
-        sources=st.session_state.current_sources,
+        messages=st.session_state.messages,
+        selected_message_index=st.session_state.selected_message_index,
+        selected_source_index=st.session_state.selected_source_index,
     )

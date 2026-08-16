@@ -1246,6 +1246,14 @@ def reciprocal_rank_fusion(
         reverse=True
     )
 
+    # Debug metadata only: record the fused rank after sorting.
+    # Does not change ordering, scores, or retrieval results.
+    for rank, result in enumerate(
+        fused_results,
+        start=1
+    ):
+        result["rrf_rank"] = rank
+
     return fused_results
 
 

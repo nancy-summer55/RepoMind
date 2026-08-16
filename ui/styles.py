@@ -191,20 +191,7 @@ html, body, [data-testid="stAppViewContainer"] {
 .rm-msg-body-error {
     color: #B42318;
 }
-.rm-citations {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
-}
-.rm-citation {
-    font-family: "JetBrains Mono", SFMono-Regular, Consolas, monospace;
-    font-size: 12px;
-    color: #4F46E5;
-    background: #EEF2FF;
-    border: 1px solid #C7D2FE;
-    border-radius: 8px;
-    padding: 2px 10px;
-}
+
 
 /* ---------- source item ---------- */
 .rm-source {
@@ -229,6 +216,18 @@ html, body, [data-testid="stAppViewContainer"] {
     font-size: 12px;
     color: #8B9098;
     margin-top: 4px;
+}
+.rm-source-number {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #4F46E5;
+    margin-bottom: 6px;
+}
+.rm-source-selected {
+    background: #EEF2FF;
+    border-color: #C7D2FE;
 }
 
 /* ---------- retrieval debug ---------- */
