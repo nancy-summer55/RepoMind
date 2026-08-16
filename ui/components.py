@@ -24,14 +24,23 @@ def _render_body(text: str) -> str:
 
 
 def render_header(repo_name: str = "", status: str = "") -> None:
+    if status == "indexed":
+        label = "Indexed"
+        dot_class = "rm-dot"
+    elif status == "indexing":
+        label = "Indexing…"
+        dot_class = "rm-dot-off"
+    else:
+        label = "Not indexed"
+        dot_class = "rm-dot-off"
     st.markdown(
         f"""
         <div class="rm-header">
             <span class="rm-brand">RepoMind</span>
             <span class="rm-repo-status">
                 <code>{html.escape(repo_name)}</code>
-                <span class="rm-dot"></span>
-                <span>{html.escape(status)}</span>
+                <span class="{dot_class}"></span>
+                <span>{html.escape(label)}</span>
             </span>
         </div>
         """,
@@ -45,33 +54,49 @@ def render_header(repo_name: str = "", status: str = "") -> None:
 
 
 def render_repository_panel(
-    path: str,
-    summary: dict[str, str],
+    initial_path: str,
+    summary: dict[str, str] | None,
     advanced: dict[str, str],
-    full_path: str | None = None,
-) -> None:
+    status: str,
+    error: str | None = None,
+) -> tuple[str, bool]:
+    """Render the repository panel.
+
+    Returns (path_from_input, index_clicked). Indexing itself is
+    orchestrated by app.py; this component only renders state.
+    """
     st.markdown(
         '<div class="rm-section-title">Repository</div>', unsafe_allow_html=True
     )
 
     st.markdown('<div class="rm-label">Path</div>', unsafe_allow_html=True)
-    st.markdown(
-        f'<div class="rm-path" title="{html.escape(full_path or path)}">'
-        f"{html.escape(path)}</div>",
-        unsafe_allow_html=True,
+    path = st.text_input(
+        "Repository path",
+        value=initial_path,
+        placeholder=r"C:\path\to\repository",
+        label_visibility="collapsed",
+        key="repository_path_input",
     )
     st.markdown(
-        '<div class="rm-caption">Full path shown on hover.</div>',
+        '<div class="rm-caption">Local .py / .md repository path.</div>',
         unsafe_allow_html=True,
     )
 
-    if st.button("Index repository", type="primary", width="stretch"):
-        st.toast("Mock indexing only - backend not connected yet.")
+    clicked = st.button("Index repository", type="primary", width="stretch")
 
-    _render_meta(summary)
+    if error:
+        st.markdown(
+            f'<div class="rm-error">{html.escape(error)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    if summary:
+        _render_meta(summary)
 
     with st.expander("Advanced"):
         _render_meta(advanced)
+
+    return path, clicked
 
 
 def _render_meta(items: dict[str, str]) -> None:

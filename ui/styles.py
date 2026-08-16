@@ -65,6 +65,13 @@ html, body, [data-testid="stAppViewContainer"] {
     background: #2F7D4A;
     display: inline-block;
 }
+.rm-dot-off {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid #8B9098;
+    display: inline-block;
+}
 
 /* ---------- panels ---------- */
 [data-testid="stColumn"] {
@@ -95,18 +102,26 @@ html, body, [data-testid="stAppViewContainer"] {
     color: #8B9098;
 }
 
-/* ---------- repository path ---------- */
-.rm-path {
+/* ---------- repository path input ---------- */
+[data-testid="stTextInput"] input {
     font-family: "JetBrains Mono", SFMono-Regular, Consolas, monospace;
     font-size: 12.5px;
-    color: #5F6368;
+    color: #17181A;
     background: #F6F7F9;
     border: 1px solid #E4E7EB;
     border-radius: 8px;
+}
+
+/* ---------- error state ---------- */
+.rm-error {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #B42318;
+    background: #FEF3F2;
+    border: 1px solid #FECDCA;
+    border-radius: 8px;
     padding: 8px 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin-top: 10px;
 }
 
 /* ---------- buttons ---------- */
