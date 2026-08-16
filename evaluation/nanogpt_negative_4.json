@@ -1,0 +1,18 @@
+[
+  {
+    "id": "N01",
+    "question": "How does nanoGPT perform reinforcement learning from human feedback?"
+  },
+  {
+    "id": "N02",
+    "question": "Where is the vision transformer model defined?"
+  },
+  {
+    "id": "N03",
+    "question": "How does nanoGPT implement beam search decoding?"
+  },
+  {
+    "id": "N04",
+    "question": "How does nanoGPT use data augmentation such as backtranslation?"
+  }
+]
