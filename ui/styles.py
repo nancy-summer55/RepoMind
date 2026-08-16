@@ -188,6 +188,9 @@ html, body, [data-testid="stAppViewContainer"] {
     border-radius: 8px;
     padding: 10px 14px;
 }
+.rm-msg-body-error {
+    color: #B42318;
+}
 .rm-citations {
     display: flex;
     gap: 8px;
@@ -237,6 +240,16 @@ html, body, [data-testid="stAppViewContainer"] {
 }
 .rm-debug-group:last-child {
     margin-bottom: 0;
+}
+.rm-debug-result {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #E4E7EB;
+}
+.rm-debug-result:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
 }
 .rm-debug-row {
     display: flex;
@@ -291,12 +304,6 @@ html, body, [data-testid="stAppViewContainer"] {
     margin: 4px 0;
 }
 
-/* ---------- backend notice ---------- */
-.rm-notice {
-    font-size: 12px;
-    color: #8B9098;
-    margin: 4px 0 0 0;
-}
 
 /* ---------- code blocks ---------- */
 [data-testid="stCode"] pre {
@@ -304,6 +311,8 @@ html, body, [data-testid="stAppViewContainer"] {
     font-family: "JetBrains Mono", SFMono-Regular, Consolas, monospace;
     font-size: 12.5px;
     line-height: 1.5;
+    max-height: 420px;
+    overflow: auto;
 }
 
 /* ---------- chat input ---------- */

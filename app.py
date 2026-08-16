@@ -1,10 +1,13 @@
-"""RepoMind - Streamlit UI, Phase 2: real repository indexing.
+"""RepoMind - Streamlit UI, Phase 3: real RAG chat.
 
-Phase 2 connects the Repository panel to the real backend index path:
+The Repository panel runs the real index and the Chat workspace now
+calls the real pipeline:
 
-    path -> index_repository() -> indexed status
+    question -> rag() -> answer + search_results
+                     -> Chat + Sources + Retrieval Debug
 
-Chat / Sources / Retrieval Debug remain mock. No rag() / DeepSeek.
+No retrieval algorithm was changed. DeepSeek is only called through
+repo_rag.rag(); the embedding model stays cached per process.
 """
 
 import os
@@ -38,9 +41,9 @@ def get_backend():
     The embedding model is loaded at repo_rag import time, so caching this
     import is what prevents Jina from reloading on every Streamlit rerun.
     """
-    from repo_rag import get_collection, index_repository
+    from repo_rag import get_collection, index_repository, rag
 
-    return index_repository, get_collection
+    return index_repository, get_collection, rag
 
 
 # ---------------------------------------------------------------------------
@@ -51,45 +54,8 @@ INDEX_CHUNK_OVERLAP = 200
 INDEX_CHUNK_STRATEGY = "ast"
 EMBEDDING_DIMENSION = "768"  # jina-embeddings-v2-base-code
 
-# ---------------------------------------------------------------------------
-# Mock data (chat / sources only - indexing is real)
-# ---------------------------------------------------------------------------
-MOCK_ADVANCED_SETTINGS = {
-    "Chunk size": str(INDEX_CHUNK_SIZE),
-    "Chunk overlap": str(INDEX_CHUNK_OVERLAP),
-    "Top K": "5",
-    "RRF K": "60",
-}
-
-MOCK_SOURCE = {
-    "path": "model.py",
-    "qualified_name": "CausalSelfAttention.forward",
-    "symbol_type": "method",
-    "start_line": 65,
-    "end_line": 98,
-    "chunk_strategy": "ast_symbol",
-}
-
-MOCK_RETRIEVAL_DEBUG = [
-    [("Rank", "1")],
-    [("Vector rank", "1"), ("Vector similarity", "0.6554")],
-    [("BM25 rank", "3")],
-    [("RRF rank", "1")],
-    [("Strategy", "ast_symbol")],
-]
-
-MOCK_MESSAGES = [
-    {"role": "user", "content": "How is self-attention implemented?"},
-    {
-        "role": "assistant",
-        "content": (
-            "Self-attention is implemented in `CausalSelfAttention`. "
-            "The `forward` method projects the input into query, key, "
-            "and value representations before applying causal attention."
-        ),
-        "citations": [1, 2],
-    },
-]
+RAG_TOP_K = 5
+RAG_MIN_SIMILARITY = 0  # keep the same gate the backend evaluation uses
 
 # ---------------------------------------------------------------------------
 # Session state
@@ -105,11 +71,44 @@ if "indexed_repository" not in st.session_state:
 if "index_error" not in st.session_state:
     st.session_state.index_error = None
 if "messages" not in st.session_state:
-    st.session_state.messages = list(MOCK_MESSAGES)
+    st.session_state.messages = []
 if "current_sources" not in st.session_state:
-    st.session_state.current_sources = [MOCK_SOURCE]
-if "backend_notice" not in st.session_state:
-    st.session_state.backend_notice = False
+    st.session_state.current_sources = []
+if "current_retrieval_results" not in st.session_state:
+    st.session_state.current_retrieval_results = []
+if "selected_message_index" not in st.session_state:
+    st.session_state.selected_message_index = None
+
+# ---------------------------------------------------------------------------
+# Refusal detection
+# ---------------------------------------------------------------------------
+_REFUSAL_MARKERS = (
+    "insufficient",
+    "cannot answer",
+    "can't answer",
+    "cannot determine",
+    "unable to answer",
+    "cannot find",
+    "cannot provide",
+    "no mention",
+    "not mentioned",
+    "not discussed",
+    "not present",
+    "does not contain",
+    "not enough information",
+    "not found in the provided",
+    "no relevant repository",
+)
+
+
+def _is_refusal(answer: str) -> bool:
+    """Text-level detection of DeepSeek's explicit refusal wording.
+
+    This is not a similarity threshold and does not add any hard-coded
+    retrieval rule; it only decides how the answer is presented.
+    """
+    text = (answer or "").lower()
+    return any(marker in text for marker in _REFUSAL_MARKERS)
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +136,7 @@ def run_index(path: str) -> None:
 
     # Load the backend only after validation so invalid paths
     # never trigger the (slow) embedding model load.
-    index_repository_fn, get_collection_fn = get_backend()
+    index_repository_fn, get_collection_fn, _ = get_backend()
 
     st.session_state.index_status = "indexing"
     st.session_state.index_error = None
@@ -172,12 +171,69 @@ def run_index(path: str) -> None:
                 state="complete",
                 expanded=False,
             )
+
+        # A new repository must not mix with the previous one's chat.
+        st.session_state.messages = []
+        st.session_state.current_sources = []
+        st.session_state.current_retrieval_results = []
+        st.session_state.selected_message_index = None
+
     except ValueError as error:
         st.session_state.index_error = str(error)
         st.session_state.index_status = "error"
     except Exception as error:
         st.session_state.index_error = f"Indexing failed: {error}"
         st.session_state.index_status = "error"
+
+
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
+def ask(prompt: str) -> None:
+    """Run the real rag() pipeline and store the result in session state."""
+
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    _, _, rag_fn = get_backend()
+
+    try:
+        with st.status(
+            "Searching repository and generating answer…", expanded=True
+        ) as status:
+            answer, search_results = rag_fn(
+                question=prompt,
+                top_k=RAG_TOP_K,
+                min_similarity=RAG_MIN_SIMILARITY,
+            )
+            status.update(label="Answer ready", state="complete", expanded=False)
+
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+                "sources": search_results,
+                "refusal": _is_refusal(answer),
+            }
+        )
+        st.session_state.current_sources = search_results
+        st.session_state.current_retrieval_results = search_results
+        st.session_state.selected_message_index = len(st.session_state.messages) - 1
+
+    except Exception:
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": (
+                    "The language model request failed. "
+                    "Your repository index is still available."
+                ),
+                "error": True,
+                "sources": [],
+            }
+        )
+        st.session_state.current_sources = []
+        st.session_state.current_retrieval_results = []
+        st.session_state.selected_message_index = len(st.session_state.messages) - 1
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +258,12 @@ with repo_col:
     path, index_clicked = components.render_repository_panel(
         initial_path=st.session_state.repository_path,
         summary=st.session_state.index_summary,
-        advanced=MOCK_ADVANCED_SETTINGS,
+        advanced={
+            "Chunk size": str(INDEX_CHUNK_SIZE),
+            "Chunk overlap": str(INDEX_CHUNK_OVERLAP),
+            "Top K": str(RAG_TOP_K),
+            "RRF K": "60",
+        },
         status=st.session_state.index_status,
         error=st.session_state.index_error,
     )
@@ -211,17 +272,19 @@ with repo_col:
         st.rerun()
 
 with chat_col:
-    components.render_mock_chat(st.session_state.messages)
-    if st.session_state.backend_notice:
-        components.render_backend_notice()
-    prompt = st.chat_input("Ask about this repository...")
+    components.render_chat(
+        messages=st.session_state.messages,
+        index_status=st.session_state.index_status,
+    )
+    prompt = st.chat_input(
+        "Ask about this repository...",
+        disabled=(st.session_state.index_status != "indexed"),
+    )
     if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.session_state.backend_notice = True
+        ask(prompt)
         st.rerun()
 
 with inspector_col:
     components.render_source_inspector(
         sources=st.session_state.current_sources,
-        retrieval_debug=MOCK_RETRIEVAL_DEBUG,
     )

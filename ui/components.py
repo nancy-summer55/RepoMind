@@ -1,7 +1,7 @@
 """Reusable Streamlit UI components for RepoMind.
 
-Pure UI: every function only renders the data it receives and never
-touches the retrieval backend. Phase 1 renders mock data only.
+Pure UI: every function renders the data it receives and never touches
+the retrieval backend. Phase 3 renders real rag() search results.
 """
 
 import html
@@ -16,6 +16,26 @@ def _render_body(text: str) -> str:
     """Escape HTML, then turn `code` spans into <code> tags."""
     escaped = html.escape(text)
     return _INLINE_CODE_RE.sub(r"<code>\1</code>", escaped)
+
+
+def _fmt(value: object) -> str:
+    """Format a retrieval field for display; None becomes N/A.
+
+    Numbers keep their raw value (similarity is never shown as a percent).
+    """
+    if value is None:
+        return "N/A"
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, int):
+        return str(value)
+    try:
+        number = float(value)
+        if number.is_integer():
+            return str(int(number))
+        return f"{number:.4f}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 # ---------------------------------------------------------------------------
@@ -115,8 +135,15 @@ def _render_meta(items: dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_mock_chat(messages: list[dict]) -> None:
+def render_chat(messages: list[dict], index_status: str) -> None:
     st.markdown('<div class="rm-section-title">Chat</div>', unsafe_allow_html=True)
+
+    if index_status != "indexed":
+        st.markdown(
+            '<div class="rm-muted">Index a repository to start asking questions.</div>',
+            unsafe_allow_html=True,
+        )
+        return
 
     if not messages:
         render_empty_state()
@@ -133,10 +160,20 @@ def render_mock_chat(messages: list[dict]) -> None:
                 "</div>",
                 unsafe_allow_html=True,
             )
+        elif message.get("refusal"):
+            render_refusal_state()
+        elif message.get("error"):
+            st.markdown(
+                '<div class="rm-msg">'
+                '<div class="rm-msg-label">RepoMind</div>'
+                f'<div class="rm-msg-body rm-msg-body-error">{body}</div>'
+                "</div>",
+                unsafe_allow_html=True,
+            )
         else:
             citations = "".join(
                 f'<span class="rm-citation">[{i}]</span>'
-                for i in message.get("citations", [])
+                for i in range(1, len(message.get("sources", [])) + 1)
             )
             st.markdown(
                 '<div class="rm-msg">'
@@ -146,13 +183,6 @@ def render_mock_chat(messages: list[dict]) -> None:
                 "</div>",
                 unsafe_allow_html=True,
             )
-
-
-def render_backend_notice() -> None:
-    st.markdown(
-        '<div class="rm-notice">Backend connection will be added in Phase 3.</div>',
-        unsafe_allow_html=True,
-    )
 
 
 def render_empty_state() -> None:
@@ -177,10 +207,7 @@ def render_empty_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_source_inspector(
-    sources: list[dict],
-    retrieval_debug: list[list[tuple[str, str]]] | None = None,
-) -> None:
+def render_source_inspector(sources: list[dict]) -> None:
     st.markdown('<div class="rm-section-title">Sources</div>', unsafe_allow_html=True)
 
     if not sources:
@@ -190,31 +217,38 @@ def render_source_inspector(
         )
         return
 
-    for source in sources:
-        render_source_item(source)
+    for result in sources:
+        render_source_item(result)
 
-    if retrieval_debug:
-        render_retrieval_debug(retrieval_debug)
+    render_retrieval_debug(sources)
 
 
-def render_source_item(source: dict) -> None:
+def render_source_item(result: dict) -> None:
+    metadata = result.get("metadata", {})
+    path = metadata.get("path", "N/A")
+    qualified_name = metadata.get("qualified_name")
+    symbol_type = metadata.get("symbol_type") or "chunk"
+    start_line = metadata.get("start_line", "?")
+    end_line = metadata.get("end_line", "?")
+    language = "markdown" if str(path).endswith(".md") else "python"
+
+    symbol_html = ""
+    if qualified_name:
+        symbol_html = (
+            f'<div class="rm-source-symbol">{html.escape(qualified_name)}</div>'
+        )
+
     st.markdown(
         '<div class="rm-source">'
-        f'<div class="rm-source-file">{html.escape(source["path"])}</div>'
-        f'<div class="rm-source-symbol">{html.escape(source["qualified_name"])}</div>'
+        f'<div class="rm-source-file">{html.escape(path)}</div>'
+        f"{symbol_html}"
         f'<div class="rm-source-meta">'
-        f'{html.escape(source["symbol_type"])} · '
-        f'lines {source["start_line"]}–{source["end_line"]}'
+        f'{html.escape(symbol_type)} · lines {start_line}–{end_line}'
         "</div></div>",
         unsafe_allow_html=True,
     )
     with st.expander("View source"):
-        st.code(
-            "def forward(self, x):\n"
-            "    B, T, C = x.size()\n"
-            "    ...\n",
-            language="python",
-        )
+        st.code(result.get("document", ""), language=language)
 
 
 # ---------------------------------------------------------------------------
@@ -222,22 +256,54 @@ def render_source_item(source: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_retrieval_debug(groups: list[list[tuple[str, str]]]) -> None:
+def render_retrieval_debug(results: list[dict]) -> None:
     with st.expander("Retrieval details"):
-        blocks = []
-        for group in groups:
-            rows = "".join(
-                '<div class="rm-debug-row">'
-                f'<span class="rm-debug-label">{html.escape(label)}</span>'
-                f'<span class="rm-debug-value">{html.escape(value)}</span>'
-                "</div>"
-                for label, value in group
+        for index, result in enumerate(results, start=1):
+            metadata = result.get("metadata", {})
+            groups = [
+                [("Final Rank", str(index))],
+                [
+                    ("Vector Rank", _fmt(result.get("vector_rank"))),
+                    ("Vector Similarity", _fmt(result.get("similarity"))),
+                ],
+                [
+                    ("BM25 Rank", _fmt(result.get("bm25_rank"))),
+                    ("BM25 Score", _fmt(result.get("bm25_score"))),
+                ],
+                [
+                    ("RRF Rank", _fmt(result.get("rrf_rank"))),
+                    ("RRF Score", _fmt(result.get("rrf_score"))),
+                ],
+                [
+                    (
+                        "Chunk Strategy",
+                        str(metadata.get("chunk_strategy") or "N/A"),
+                    ),
+                    (
+                        "Symbol",
+                        str(metadata.get("qualified_name") or "N/A"),
+                    ),
+                    (
+                        "Lines",
+                        f'{metadata.get("start_line", "?")}'
+                        f'–{metadata.get("end_line", "?")}',
+                    ),
+                ],
+            ]
+            blocks = []
+            for group in groups:
+                rows = "".join(
+                    '<div class="rm-debug-row">'
+                    f'<span class="rm-debug-label">{html.escape(label)}</span>'
+                    f'<span class="rm-debug-value">{html.escape(value)}</span>'
+                    "</div>"
+                    for label, value in group
+                )
+                blocks.append(f'<div class="rm-debug-group">{rows}</div>')
+            st.markdown(
+                f'<div class="rm-debug-result">{"".join(blocks)}</div>',
+                unsafe_allow_html=True,
             )
-            blocks.append(f'<div class="rm-debug-group">{rows}</div>')
-        st.markdown(
-            f'<div class="rm-debug">{"".join(blocks)}</div>',
-            unsafe_allow_html=True,
-        )
 
 
 # ---------------------------------------------------------------------------
