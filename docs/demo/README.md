@@ -22,7 +22,7 @@ Show the Repository panel after indexing `..\target_repos\nanoGPT`:
 How to capture:
 
 1. `streamlit run app.py`
-2. Enter `C:\...\target_repos\nanoGPT` and click **Index repository**
+2. Enter `..\target_repos\nanoGPT` and click **Index repository**
 3. Wait for `Indexed` status and the summary
 4. Screenshot the top of the page (header + Repository panel)
 

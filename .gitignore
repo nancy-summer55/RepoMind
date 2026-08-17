@@ -1,5 +1,31 @@
+# Environment / secrets
 .env
+.env.*
+!.env.example
+
+# Chroma runtime data
 chroma_db/
+
+# Python
 __pycache__/
-*.pyc
-.venv-release-test/
+*.py[cod]
+.venv/
+.venv-*/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+
+# Experiment scratch data
+evaluation/_tmp_*/
+_tmp_*/
+
+# Local target repositories (never commit)
+target_repos/
+
+# OS / editor
+.DS_Store
+Thumbs.db
