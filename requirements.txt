@@ -1,0 +1,23 @@
+# RepoMind minimal runtime dependencies
+# Tested together on Python 3.13 (Windows, CPU torch).
+
+# --- Jina embedding compatibility pins ---
+# jinaai/jina-embeddings-v2-base-code requires transformers < 5 plus these
+# exact companion versions. repo_rag.py ships a small compatibility shim.
+transformers==4.51.0
+huggingface_hub==0.36.2
+tokenizers==0.21.4
+accelerate==1.14.0
+
+# --- Streamlit app ---
+streamlit==1.61.1
+
+# --- Retrieval / RAG backend ---
+chromadb==1.5.9
+sentence-transformers==5.7.0
+rank-bm25==0.2.2
+nltk==3.10.3
+openai==3.1.0
+python-dotenv==1.2.2
+numpy==2.5.1
+torch==2.13.0

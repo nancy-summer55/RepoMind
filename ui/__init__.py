@@ -1,0 +1,1 @@
+"""RepoMind UI package (Phase 1: static components, no backend)."""
