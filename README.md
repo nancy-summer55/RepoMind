@@ -284,3 +284,7 @@ We do **not** claim that symbol-level retrieval is solved. `GPT.generate` remain
 - Broader evaluation across multiple repositories and languages.
 - Multi-repository / workspace mode.
 - GraphRAG or AST-graph structures for cross-symbol reasoning.
+
+## License
+
+[MIT](LICENSE) © 2026 nancy-summer55

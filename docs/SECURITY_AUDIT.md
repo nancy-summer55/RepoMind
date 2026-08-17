@@ -55,7 +55,7 @@ The largest tracked files are the four demo PNG screenshots (all under 100 KB). 
 
 ## License
 
-Not yet present. A license should be selected by the repository owner before the repository is promoted for general reuse.
+MIT License (Copyright (c) 2026 nancy-summer55).
 
 ## Final Result
 
