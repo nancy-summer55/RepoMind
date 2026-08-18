@@ -1,0 +1,192 @@
+[
+  {
+    "id": "LMVP-O01",
+    "repository": "nanoGPT",
+    "question": "What does this project do?",
+    "type": "overview",
+    "expected_files": ["README.md"],
+    "expected_symbols": [],
+    "negative": false,
+    "notes": "Checks project overview grounding from README and entry-level context."
+  },
+  {
+    "id": "LMVP-O02",
+    "repository": "nanoGPT",
+    "question": "Which files should I read first to understand nanoGPT?",
+    "type": "overview",
+    "expected_files": ["README.md", "train.py", "model.py", "sample.py"],
+    "expected_symbols": [],
+    "negative": false,
+    "notes": "Checks learning-oriented reading guidance and source citations."
+  },
+  {
+    "id": "LMVP-O03",
+    "repository": "nanoGPT",
+    "question": "What are the main modules in this repository?",
+    "type": "overview",
+    "expected_files": ["README.md", "model.py", "train.py", "sample.py"],
+    "expected_symbols": [],
+    "negative": false,
+    "notes": "Checks module grouping without requiring a full call graph."
+  },
+  {
+    "id": "LMVP-F01",
+    "repository": "nanoGPT",
+    "question": "How is self-attention implemented?",
+    "type": "feature",
+    "expected_files": ["model.py"],
+    "expected_symbols": ["CausalSelfAttention.forward", "CausalSelfAttention.__init__"],
+    "negative": false,
+    "notes": "Checks implementation flow, key functions, and model source labeling."
+  },
+  {
+    "id": "LMVP-F02",
+    "repository": "nanoGPT",
+    "question": "How does text generation work?",
+    "type": "feature",
+    "expected_files": ["sample.py", "model.py"],
+    "expected_symbols": ["GPT.generate"],
+    "negative": false,
+    "notes": "Known harder symbol case; acceptable answer should ground generation in retrieved sample/model evidence."
+  },
+  {
+    "id": "LMVP-F03",
+    "repository": "nanoGPT",
+    "question": "Where is the training loop implemented?",
+    "type": "feature",
+    "expected_files": ["train.py"],
+    "expected_symbols": [],
+    "negative": false,
+    "notes": "Checks training flow retrieval and training source labeling."
+  },
+  {
+    "id": "LMVP-F04",
+    "repository": "nanoGPT",
+    "question": "How does nanoGPT load pretrained GPT-2 weights?",
+    "type": "feature",
+    "expected_files": ["model.py"],
+    "expected_symbols": ["GPT.from_pretrained"],
+    "negative": false,
+    "notes": "Checks file/symbol grounding for pretrained model loading."
+  },
+  {
+    "id": "LMVP-F05",
+    "repository": "nanoGPT",
+    "question": "What does the get_batch helper return?",
+    "type": "feature",
+    "expected_files": ["train.py"],
+    "expected_symbols": ["get_batch"],
+    "negative": false,
+    "notes": "Checks concise implementation answer for a helper function."
+  },
+  {
+    "id": "LMVP-C01",
+    "repository": "nanoGPT",
+    "question": "What does attention mask do in this codebase?",
+    "type": "concept",
+    "expected_files": ["model.py"],
+    "expected_symbols": ["CausalSelfAttention.forward"],
+    "negative": false,
+    "notes": "Checks concept explanation grounded in model implementation."
+  },
+  {
+    "id": "LMVP-C02",
+    "repository": "nanoGPT",
+    "question": "How are logits and loss computed in a forward pass?",
+    "type": "concept",
+    "expected_files": ["model.py"],
+    "expected_symbols": ["GPT.forward"],
+    "negative": false,
+    "notes": "Checks concept answer for inputs, outputs, and loss computation."
+  },
+  {
+    "id": "LMVP-C03",
+    "repository": "nanoGPT",
+    "question": "How does gradient accumulation work during training?",
+    "type": "concept",
+    "expected_files": ["train.py"],
+    "expected_symbols": [],
+    "negative": false,
+    "notes": "Checks training concept grounding and follow-up usefulness."
+  },
+  {
+    "id": "LMVP-C04",
+    "repository": "nanoGPT",
+    "question": "What is the role of the Block class in the transformer?",
+    "type": "concept",
+    "expected_files": ["model.py"],
+    "expected_symbols": ["Block"],
+    "negative": false,
+    "notes": "Checks concept explanation tied to a model class."
+  },
+  {
+    "id": "LMVP-C05",
+    "repository": "nanoGPT",
+    "question": "What does the estimate_loss helper compute?",
+    "type": "concept",
+    "expected_files": ["train.py"],
+    "expected_symbols": ["estimate_loss"],
+    "negative": false,
+    "notes": "Checks concept-style answer for evaluation loss measurement."
+  },
+  {
+    "id": "LMVP-G01",
+    "repository": "nanoGPT",
+    "question": "How are configuration values overridden?",
+    "type": "configuration",
+    "expected_files": ["configurator.py", "train.py"],
+    "expected_symbols": [],
+    "negative": false,
+    "notes": "Checks config file retrieval and configuration source labeling."
+  },
+  {
+    "id": "LMVP-G02",
+    "repository": "nanoGPT",
+    "question": "How is the training device chosen?",
+    "type": "configuration",
+    "expected_files": ["train.py"],
+    "expected_symbols": [],
+    "negative": false,
+    "notes": "Checks runtime configuration grounding."
+  },
+  {
+    "id": "LMVP-G03",
+    "repository": "nanoGPT",
+    "question": "Where are model architecture sizes defined?",
+    "type": "configuration",
+    "expected_files": ["model.py", "train.py"],
+    "expected_symbols": ["GPTConfig"],
+    "negative": false,
+    "notes": "Known harder symbol case; answer should cite available architecture/config evidence."
+  },
+  {
+    "id": "LMVP-N01",
+    "repository": "nanoGPT",
+    "question": "How does nanoGPT perform reinforcement learning from human feedback?",
+    "type": "negative",
+    "expected_files": [],
+    "expected_symbols": [],
+    "negative": true,
+    "notes": "Checks refusal for unsupported RLHF behavior."
+  },
+  {
+    "id": "LMVP-N02",
+    "repository": "nanoGPT",
+    "question": "Where is the vision transformer model defined?",
+    "type": "negative",
+    "expected_files": [],
+    "expected_symbols": [],
+    "negative": true,
+    "notes": "Checks refusal when retrieved model code is GPT-only, not vision transformer code."
+  },
+  {
+    "id": "LMVP-N03",
+    "repository": "nanoGPT",
+    "question": "How does nanoGPT implement beam search decoding?",
+    "type": "negative",
+    "expected_files": [],
+    "expected_symbols": [],
+    "negative": true,
+    "notes": "Checks refusal for a decoding method not implemented by the repository."
+  }
+]

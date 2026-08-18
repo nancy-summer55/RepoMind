@@ -1,124 +1,137 @@
 # RepoMind
 
-RepoMind is a RAG-based open-source repository learning assistant that combines AST-aware chunking, code embeddings, hybrid retrieval, and source-level citations.
+RepoMind is an AI open-source project learning assistant for beginners who want to understand unfamiliar codebases.
 
-It answers natural-language questions about a local codebase ("How is self-attention implemented?"), points back to the exact file / symbol / lines it used, and shows the retrieval ranking that produced each answer.
+It indexes a local Python / Markdown repository, builds a Learning Map after indexing, and answers guided questions with source evidence. The core experience is:
+
+- **Learning Map:** a first-pass project summary, entry points, reading order, and starter questions.
+- **Guided Q&A:** intent-aware answers for project overview, feature implementation, AI concepts, configuration, and file/symbol questions.
+- **Source Evidence:** every grounded answer is expected to cite `[Source N]`, with file, symbol, line range, source role, and retrieval debug available for inspection.
+
+RepoMind is not a code editor or an autonomous coding agent. Its current goal is repository understanding and learning.
 
 ---
 
-## Overview
+## Product Positioning
 
-RepoMind indexes a local repository, chunks it with AST-aware structure (for Python) and fixed-size chunks (for Markdown), embeds chunks with a code embedding model, and stores them in Chroma. A query is answered through a hybrid pipeline — dense vector search + BM25, fused with Reciprocal Rank Fusion (RRF), de-duplicated, and grounded through DeepSeek — with every answer citing its sources.
+RepoMind is designed for AI learners reading real open-source projects. Instead of only returning a generic RAG answer, it tries to guide the learning process:
 
-The Streamlit UI exposes:
+1. Index the repository.
+2. Generate a Learning Map.
+3. Offer starter questions.
+4. Classify the user's question intent.
+5. Retrieve relevant source chunks.
+6. Compose a grounded answer prompt.
+7. Show follow-up questions, source evidence, and retrieval debug.
 
-- Repository indexing (path -> index -> indexed summary)
-- A chat workspace backed by the real RAG pipeline
-- A Sources inspector (file, symbol, lines, source code preview)
-- A Retrieval Debug panel (vector / BM25 / RRF ranks and scores)
-- An explicit "Insufficient repository context" refusal state
+This keeps the product focused on learning workflows: where to start, how a feature is implemented, how an AI concept appears in code, and which source files support the answer.
 
-## Why RepoMind
+## Current Implemented Capabilities
 
-- **Developer-focused.** The goal is to understand an unfamiliar codebase, not to produce marketing text.
-- **Grounded answers.** DeepSeek is prompted to answer only from the retrieved context and to cite `[Source N]`.
-- **Transparent retrieval.** Every answer can be audited: which chunks were retrieved, in what order, and by which retriever.
-- **Honest about limits.** Retrieval debug, refusals, and a candid Limitations section are first-class.
+- Indexes local `.py` and `.md` repositories.
+- Uses Python AST-aware chunking for Python files and fixed-size chunking for Markdown.
+- Generates embeddings with `jinaai/jina-embeddings-v2-base-code`.
+- Stores the index in Chroma.
+- Retrieves with dense vector search + BM25 + Reciprocal Rank Fusion (RRF) + overlap deduplication.
+- Generates a Learning Map after a successful index run.
+- Displays Learning Map starter questions.
+- Lets starter questions enter the same chat flow as manual questions.
+- Supports Guided Q&A for:
+  - project overview questions
+  - feature implementation questions
+  - AI concept questions grounded in repository code
+  - configuration questions
+  - file or symbol questions
+- Labels retrieved sources with source roles such as documentation, entry point, model logic, training logic, inference logic, configuration, test, utility, and core implementation.
+- Shows source inspector details: file, symbol, lines, code preview, source role, and relevance reason.
+- Shows retrieval debug: vector / BM25 / RRF ranks and scores.
+- Shows follow-up questions under assistant answers.
+- Refuses or marks insufficient-context answers when evidence is not enough.
 
-## Demo
+## Technology Stack
 
-See `docs/demo/README.md` for the planned demo screenshots:
-
-1. `01-indexed-repository.png` — indexed repository summary
-2. `02-self-attention-answer.png` — a grounded answer with sources
-3. `03-retrieval-debug.png` — vector / BM25 / RRF debug
-4. `04-insufficient-context.png` — the refusal state on a negative question
-
-## Features
-
-- Python AST-aware chunking; Markdown fixed chunking (`chunk_size=1200`, `chunk_overlap=200`)
-- Code embeddings: `jinaai/jina-embeddings-v2-base-code` (768 dims)
-- Hybrid retrieval: Chroma vector search + BM25 + RRF fusion (k=60) + overlap dedup
-- DeepSeek-grounded answers with `[Source N]` citations
-- Sources inspector with file / symbol / lines / code preview
-- Retrieval debug with vector, BM25, and RRF ranks and raw scores
-- Refusal state for insufficient context (no similarity threshold)
-- Streamlit UI with real indexing, chat history, citation/source linking, and "Clear conversation"
+- **UI:** Streamlit
+- **Vector store:** Chroma
+- **Embeddings:** Jina code embeddings (`jinaai/jina-embeddings-v2-base-code`, 768 dimensions)
+- **Lexical retrieval:** BM25
+- **Rank fusion:** Reciprocal Rank Fusion (RRF, k=60)
+- **Generation:** DeepSeek through an OpenAI-compatible client
+- **Chunking:** Python AST-aware chunking plus Markdown fixed chunking
 
 ## Architecture
 
 ```mermaid
 flowchart TD
     A[Local Repository] --> B[Repository Loader]
-    B --> C[AST-aware Chunking]
-    C --> D[Jina Code Embedding]
-    D --> E[Chroma Vector Search]
-    C --> F[BM25 Search]
-    E --> G[RRF Fusion]
-    F --> G
-    G --> H[Overlap Deduplication]
-    H --> I[Top-K Context]
-    I --> J[DeepSeek]
-    J --> K[Answer + Sources]
-    K --> L[Retrieval Debug]
+    B --> C[Python AST / Markdown Chunking]
+    C --> D[Jina Code Embeddings]
+    D --> E[Chroma Vector Index]
+    C --> F[Learning Artifacts]
+    F --> G[Learning Map Prompt]
+    G --> H[DeepSeek Learning Map]
+    E --> I[Vector Search]
+    C --> J[BM25 Corpus]
+    I --> K[RRF Fusion]
+    J --> K
+    K --> L[Deduped Sources]
+    L --> M[Guided Q&A]
+    M --> N[DeepSeek Answer]
+    N --> O[Answer + Follow-ups + Source Evidence]
 ```
 
-Current defaults:
+## Guided Q&A Flow
 
-- Python: AST-aware chunking
-- Markdown: fixed-size chunking
-- Embedding: `jinaai/jina-embeddings-v2-base-code`
-- Vector store: Chroma (cosine, HNSW)
-- Lexical retrieval: BM25
-- Fusion: RRF (k=60)
-- LLM: DeepSeek (`deepseek-chat`)
-- Reranker: **currently disabled by default**
+The Streamlit chat no longer treats generation as a single generic RAG call. It uses the existing backend retrieval, then adds a learning-oriented orchestration layer:
 
-## RAG Pipeline
-
-```
+```text
 Question
    |
-   +-- Vector Search (Top-15, Jina code embeddings)
-   +-- BM25 (Top-15)
-   |
-   +--> RRF Fusion (k=60)
-   |
-   +--> Overlap Deduplication (threshold 0.30)
-   |
-   +--> Top-K Context (default k=5)
-   |
-   +--> DeepSeek (grounded generation)
-   |
-   +--> Answer + [Source N] citations + Retrieval Debug
+   +--> classify question intent
+   +--> plan query hints
+   +--> repo_rag.hybrid_search()
+   +--> normalize and label sources
+   +--> build intent-specific answer prompt
+   +--> DeepSeek
+   +--> AnswerResult
+   +--> Markdown answer + follow-ups + source inspector
 ```
 
-`repo_rag.rag(question, top_k=5, min_similarity=0)` is the single entry point used by the UI. The similarity gate is kept at 0 (disabled), matching the evaluation setup.
+The existing `repo_rag.py` retrieval behavior remains the low-level retrieval backend. The Learning modules sit around it and do not change Chroma indexing, vector search, BM25, RRF, or dedup behavior.
 
-## Chunking Strategy
+## Learning Map Flow
 
-- **Python:** AST-aware chunking produces symbol chunks (`ast_symbol`, `ast_symbol_split` for large symbols), class-context chunks, and residual chunks. This keeps definitions like `CausalSelfAttention.forward` or `GPT.from_pretrained` as first-class retrievable units.
-- **Markdown:** fixed-size chunking with the same 1200/200 window.
+After indexing succeeds, RepoMind builds Learning artifacts from the repository documents and chunks:
 
-For nanoGPT this yields 90 chunks: 28 AST symbol chunks, 39 AST residual chunks, 6 class-context chunks, and 17 fixed/Markdown chunks.
+- file profiles
+- project profile
+- selected Learning Map sources
+- Learning Map prompt
+- generated Learning Map
 
-## Hybrid Retrieval
+If Learning Map generation fails, the repository index remains available and chat can still be used. The UI records the Learning Map error instead of treating it as an indexing failure.
 
-- **Vector:** Jina code embedding, cosine distance in Chroma.
-- **BM25:** Porter-stemmed tokenizer over the same chunks.
-- **RRF:** `1 / (k + rank)` fusion of both rank lists, k=60.
-- **Dedup:** line-overlap removal (threshold 0.30) to keep Top-K slots diverse.
-- **Reranker:** two CrossEncoder rerankers were evaluated and both regressed Top-1; the reranker is **off** in the default pipeline (see Experiments).
+## Basic Usage
+
+```bash
+streamlit run app.py
+```
+
+1. Enter a local repository path.
+2. Click **Index repository**.
+3. Wait for indexing to complete.
+4. Review the Learning Map when available.
+5. Click a starter question or type your own question.
+6. Read the structured Markdown answer.
+7. Inspect **Sources** for file, symbol, lines, source role, relevance reason, and code preview.
+8. Expand **Retrieval details** to audit vector / BM25 / RRF rankings.
 
 ## Evaluation
 
-All numbers below come from the reports in `evaluation/`. They are measured on **nanoGPT** and should not be interpreted as universal performance across arbitrary repositories.
+Evaluation assets live in `evaluation/`.
 
-### 24-question evaluation (current configuration)
+Existing retrieval evaluations are based on **nanoGPT** and should not be treated as universal performance claims:
 
-`AST chunking + Jina Code + Vector + BM25 + RRF + Dedup + DeepSeek` (reranker off, threshold=0).
-
-```
+```text
 File Hit@1   = 91.7%  (22/24)
 File Hit@3   = 95.8%  (23/24)
 File Hit@5   = 95.8%  (23/24)
@@ -128,33 +141,40 @@ Symbol Hit@3 = 76.9%  (10/13)
 Symbol Hit@5 = 76.9%  (10/13)
 ```
 
-Known misses on this set: `Q15` (mixed precision, file-level), and symbol-level `GPT.generate`, `GPT._init_weights`, `GPTConfig`.
+Known misses include mixed precision retrieval and several symbol-level cases such as `GPT.generate`, `GPT._init_weights`, and `GPTConfig`.
 
-### Negative / refusal evaluation
+The Learning MVP adds:
 
+- `evaluation/learning_eval_questions.json`: a 19-question nanoGPT Learning evaluation set covering overview, feature, concept, configuration, and negative/refusal questions.
+- `evaluation/learning_eval_template.md`: a manual evaluation template for retrieval quality, answer grounding, learning usefulness, follow-up quality, refusal behavior, failure classification, and final judgment.
+
+## Refusal And Grounding
+
+RepoMind prompts DeepSeek to answer only from retrieved repository evidence and cite repository facts with `[Source N]`.
+
+When evidence is insufficient, the answer should say so clearly. The UI keeps sources and retrieval debug visible so failures can be inspected instead of hidden.
+
+Negative evaluation currently checks out-of-scope questions such as RLHF, vision transformers, beam search, and data augmentation/backtranslation.
+
+## Project Structure
+
+```text
+repomind/
+|-- app.py                    # Streamlit entry point and app orchestration
+|-- repo_rag.py               # indexing, embeddings, Chroma, hybrid retrieval, DeepSeek backend helpers
+|-- repo_loader.py            # .py / .md repository file discovery
+|-- chunker.py                # fixed-size chunking
+|-- ast_chunker.py            # Python AST-aware chunking
+|-- learning/                 # Learning Map and Guided Q&A pure modules
+|-- ui/
+|   |-- components.py         # Streamlit rendering components
+|   `-- styles.py             # custom CSS
+|-- evaluation/               # retrieval reports and Learning MVP evaluation assets
+|-- docs/                     # implementation notes and demo planning
+|-- requirements.txt
+|-- .env.example
+`-- .gitignore
 ```
-Correct Refusal Rate = 4/4 = 100%
-Hallucinated Answer   = 0/4
-```
-
-DeepSeek refused all four out-of-scope questions (RLHF, vision transformer, beam search, backtranslation) instead of fabricating answers.
-
-### Experiment comparison (6-question evaluation)
-
-| Pipeline | Hit@1 | Hit@3 | Hit@5 |
-| -------- | ----: | ----: | ----: |
-| MiniLM + Vector | 66.7% | 83.3% | 83.3% |
-| MiniLM + Hybrid | 66.7% | 83.3% | 100% |
-| Jina + Fixed + Hybrid | 83.3% | 100% | 100% |
-| Jina + AST + Hybrid | 100% | 100% | 100% |
-
-> Note: the last row (Jina + AST + Hybrid) comes from the earlier **6-question evaluation**, not the 24-question one. On the larger 24-question set the same pipeline measures File Hit@1 = 91.7%. The two numbers must not be mixed.
-
-## Refusal / Grounding
-
-- DeepSeek's system prompt requires answering only from the retrieved repository context and explicitly saying so when the context is insufficient.
-- The UI detects explicit refusal wording in the answer text and renders the `Insufficient repository context` state instead of a generic error. This is text-level presentation logic only — there is **no** similarity threshold and no hard-coded retrieval rule.
-- On refusal, the actually-retrieved Sources and Retrieval Debug remain visible so the failure is inspectable.
 
 ## Installation
 
@@ -189,101 +209,35 @@ Create the environment file:
 cp .env.example .env
 ```
 
-Then fill in `DEEPSEEK_API_KEY` (and optionally `DEEPSEEK_MODEL` / `EMBEDDING_MODEL`). `.env` is gitignored.
+Then fill in `DEEPSEEK_API_KEY`. You may also set `DEEPSEEK_MODEL` and `EMBEDDING_MODEL`. `.env` is gitignored.
 
-> Python 3.13 on Windows CPU was used for development. The pinned `transformers==4.51.0` / `huggingface_hub==0.36.2` / `tokenizers==0.21.4` trio is required for `jina-embeddings-v2-base-code` compatibility.
+Python 3.13 on Windows CPU was used for development. The pinned `transformers==4.51.0` / `huggingface_hub==0.36.2` / `tokenizers==0.21.4` versions are required for `jina-embeddings-v2-base-code` compatibility.
 
-## Usage
+## Current Limits
 
-```bash
-streamlit run app.py
-```
-
-1. Enter a local repository path
-2. Click **Index repository**
-3. Wait for indexing to complete (Files / Chunks / strategy / embedding shown)
-4. Ask questions in the chat
-5. Inspect **Sources** (file / symbol / lines / code preview)
-6. Expand **Retrieval details** to audit vector / BM25 / RRF ranks
-
-## Project Structure
-
-```text
-repomind/
-├── app.py               # Streamlit UI entry point (indexing + chat orchestration)
-├── repo_rag.py          # RAG pipeline: load -> chunk -> embed -> hybrid search -> DeepSeek
-├── repo_loader.py       # Repository file discovery (.py / .md)
-├── chunker.py           # Fixed-size chunking (Markdown fallback)
-├── ast_chunker.py       # AST-aware Python chunking
-├── hybrid_retriever.py  # Standalone experimental hybrid retrieval (not used by the current pipeline)
-├── ui/
-│   ├── __init__.py
-│   ├── styles.py        # All custom CSS
-│   └── components.py    # Reusable UI components
-├── design-system/
-│   └── MASTER.md        # Visual / interaction design spec
-├── evaluation/          # Experiment and evaluation reports
-├── docs/demo/           # Demo screenshot plan
-├── requirements.txt
-├── .env.example
-└── .gitignore
-```
-
-## Experiments & Lessons Learned
-
-The experiment log, in order:
-
-```text
-Vector baseline
-↓
-Dedup experiment
-↓
-Hybrid Vector + BM25 + RRF
-↓
-General reranker regression
-↓
-Python code reranker regression
-↓
-Jina Code Embedding
-↓
-AST-aware Chunking
-↓
-Extended Evaluation
-↓
-Streamlit MVP
-```
-
-- **Dedup did not improve Hit@K** (66.7/83.3/83.3 before and after on the 6-question set). It is still kept as a safety mechanism so overlapping chunks do not waste Top-K slots.
-- **Hybrid retrieval improved recall**: Hit@5 rose from 83.3% to 100% on the 6-question set (BM25 + RRF recovered the `sample.py` generation loop on Q6).
-- **Both CrossEncoder rerankers caused Top-1 regression** and were therefore not adopted:
-  - MS MARCO (`cross-encoder/ms-marco-MiniLM-L6-v2`): Hit@1 dropped to 33.3% (vs 66.7% hybrid).
-  - Python code reranker (`NamanAgnih0tri/code-reranker-miniLM-staqc`): Hit@1 50.0% (better than MS MARCO, still below hybrid 66.7%), with the same README-over-code promotions on Q3/Q4.
-- **Jina Code embedding clearly improved file-level retrieval**: Hit@1 66.7% -> 83.3%, Hit@3 83.3% -> 100% (Jina + Fixed + Hybrid).
-- **AST chunking alone (with MiniLM) regressed Q6** (File Hit@5 100% -> 83.3%); the embedding could not exploit the new symbol headers.
-- **AST + Jina became the default**: 100/100/100 file Hit@K on the 6-question set, resolving the Q5 README bias, with `CausalSelfAttention.*` and `GPT.from_pretrained` reaching Top-1.
-- **Extended 24-question evaluation** showed the 6-question 100% was not fully maintained (File Hit@1 91.7%) and that symbol-level retrieval (Hit@1 46.2%) is meaningfully weaker than file-level retrieval.
-
-We do **not** claim that symbol-level retrieval is solved. `GPT.generate` remains a documented hard case (it is split across two chunks, BM25-strong but vector-weak).
-
-## Limitations
-
-- Symbol-level retrieval is still clearly weaker than file-level retrieval (24-question Symbol Hit@1 = 46.2% vs File Hit@1 = 91.7%).
-- `GPT.generate` is a known hard case: the symbol is split into two chunks and misses the final Top-5.
-- AST-aware chunking currently supports **Python only**; Markdown uses fixed-size chunking.
-- Single-repository mode: one repository indexed at a time; re-indexing clears the previous chat.
-- DeepSeek latency depends on network and API availability.
-- The refusal UI currently identifies refusals from answer text markers; it is not a retrieval-time classifier.
-- Evaluation is based primarily on nanoGPT and does not generalize automatically.
-- No reranker is enabled by default (see Experiments).
-- No query rewriting, agent orchestration, or GraphRAG.
+- Only Python and Markdown files are loaded.
+- Python is the only AST-aware language. Markdown uses fixed-size chunking.
+- RepoMind does not edit code.
+- MCP is not supported.
+- Multi-language AST parsing is not supported.
+- Full call graph generation is not supported.
+- Local LLM execution is not supported.
+- The product is still primarily single-repository learning.
+- Re-indexing rebuilds the Chroma collection for the current repository.
+- BM25 is rebuilt per query from the Chroma collection.
+- DeepSeek latency and availability depend on network and API health.
+- Symbol-level retrieval is weaker than file-level retrieval.
+- The Learning Map is generated after indexing but is not a complete architectural proof; it is a grounded learning aid.
 
 ## Future Work
 
-- A symbol-aware reranker is the highest-value next step (the current candidates regressed Top-1).
-- Query rewriting for vocabulary-gap questions (e.g., the mixed-precision case).
-- Broader evaluation across multiple repositories and languages.
-- Multi-repository / workspace mode.
-- GraphRAG or AST-graph structures for cross-symbol reasoning.
+- Broader Learning MVP evaluation across more repositories.
+- Better symbol-level retrieval.
+- Query rewriting for vocabulary-gap questions.
+- Deeper source-role and learning-path evaluation.
+- Multi-repository or workspace mode.
+- Call graph or AST graph support.
+- Optional local LLM support.
 
 ## License
 

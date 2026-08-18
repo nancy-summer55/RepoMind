@@ -138,10 +138,11 @@ def _render_meta(items: dict[str, str]) -> None:
 def render_chat(
     messages: list[dict],
     index_status: str,
-) -> tuple[bool, int | None, int | None]:
+) -> tuple[bool, int | None, int | None, str | None]:
     """Render the Chat workspace.
 
-    Returns (clear_clicked, selected_message_index, selected_source_index).
+    Returns (clear_clicked, selected_message_index, selected_source_index,
+    followup_question).
     """
 
     title_col, clear_col = st.columns(
@@ -164,14 +165,15 @@ def render_chat(
             '<div class="rm-muted">Index a repository to start asking questions.</div>',
             unsafe_allow_html=True,
         )
-        return clear_clicked, None, None
+        return clear_clicked, None, None, None
 
     if not messages:
         render_empty_state()
-        return clear_clicked, None, None
+        return clear_clicked, None, None, None
 
     clicked_message = None
     clicked_source = None
+    followup_question = None
 
     for message_index, message in enumerate(messages):
         role = message.get("role")
@@ -189,6 +191,7 @@ def render_chat(
         # assistant message
         if message.get("refusal"):
             render_refusal_state()
+            st.markdown(message.get("content", ""))
         elif message.get("error"):
             st.markdown(
                 '<div class="rm-msg">'
@@ -198,13 +201,8 @@ def render_chat(
                 unsafe_allow_html=True,
             )
         else:
-            st.markdown(
-                '<div class="rm-msg">'
-                '<div class="rm-msg-label">RepoMind</div>'
-                f'<div class="rm-msg-body">{body}</div>'
-                "</div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown('<div class="rm-msg-label">RepoMind</div>', unsafe_allow_html=True)
+            st.markdown(message.get("content", ""))
 
         # Source selector: "Source N" matches [Source N] in the answer.
         sources = message.get("sources", [])
@@ -220,7 +218,19 @@ def render_chat(
                         clicked_message = message_index
                         clicked_source = source_index
 
-    return clear_clicked, clicked_message, clicked_source
+        followups = message.get("followups", [])
+        if followups:
+            followup_cols = st.columns(len(followups))
+            for followup_index, followup_col in enumerate(followup_cols):
+                with followup_col:
+                    if st.button(
+                        followups[followup_index],
+                        key=f"followup_{message_index}_{followup_index}",
+                        width="stretch",
+                    ):
+                        followup_question = followups[followup_index]
+
+    return clear_clicked, clicked_message, clicked_source, followup_question
 
 
 def render_empty_state() -> None:
@@ -295,6 +305,8 @@ def render_source_item(
     metadata = result.get("metadata", {})
     path = metadata.get("path", "N/A")
     qualified_name = metadata.get("qualified_name")
+    source_role = metadata.get("source_role")
+    relevance_reason = metadata.get("relevance_reason")
     symbol_type = metadata.get("symbol_type") or "chunk"
     start_line = metadata.get("start_line", "?")
     end_line = metadata.get("end_line", "?")
@@ -310,6 +322,20 @@ def render_source_item(
             f'<div class="rm-source-symbol">{html.escape(qualified_name)}</div>'
         )
 
+    role_html = ""
+    if source_role:
+        role_html = (
+            f'<div class="rm-source-meta">Role: {html.escape(str(source_role))}</div>'
+        )
+
+    reason_html = ""
+    if relevance_reason:
+        reason_html = (
+            '<div class="rm-caption">'
+            f'{html.escape(str(relevance_reason))}'
+            "</div>"
+        )
+
     css_class = "rm-source rm-source-selected" if selected else "rm-source"
 
     st.markdown(
@@ -317,11 +343,14 @@ def render_source_item(
         f"{number_html}"
         f'<div class="rm-source-file">{html.escape(path)}</div>'
         f"{symbol_html}"
+        f"{role_html}"
         f'<div class="rm-source-meta">'
         f'{html.escape(symbol_type)} · lines {start_line}–{end_line}'
         "</div></div>",
         unsafe_allow_html=True,
     )
+    if reason_html:
+        st.markdown(reason_html, unsafe_allow_html=True)
     with st.expander("View source", expanded=selected):
         st.code(result.get("document", ""), language=language)
 

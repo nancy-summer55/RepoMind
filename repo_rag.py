@@ -44,6 +44,11 @@ EMBEDDING_MODEL_NAME = os.getenv(
     "jinaai/jina-embeddings-v2-base-code"
 )
 
+EMBEDDING_MODEL_PATH = os.getenv(
+    "EMBEDDING_MODEL_PATH",
+    ""
+).strip()
+
 # 如果 .env 中已经配置 DEEPSEEK_MODEL，
 # 会优先使用 .env 中的值。
 DEEPSEEK_MODEL = os.getenv(
@@ -125,55 +130,155 @@ def configure_console_encoding():
 # Load Embedding Model
 # ============================================================
 
-print(
-    "Loading embedding model..."
-)
+_embedding_model = None
 
-if EMBEDDING_MODEL_NAME == "jinaai/jina-embeddings-v2-base-code":
 
-    # Minimal compatibility shim:
-    # jina-embeddings-v2-base-code ships a custom modeling_bert.py that
-    # imports `find_pruneable_heads_and_indices`, which was removed in
-    # transformers>=5. Re-expose the legacy helper before loading.
-    import torch
-    import transformers.pytorch_utils as _pytorch_utils
+def get_embedding_model():
+    """
+    Load the embedding model only when indexing or
+    vector retrieval actually needs it.
+    """
 
-    if not hasattr(_pytorch_utils, "find_pruneable_heads_and_indices"):
+    global _embedding_model
 
-        def find_pruneable_heads_and_indices(
-            heads,
-            n_heads,
-            head_size,
-            already_pruned_heads
-        ):
-            mask = torch.ones(n_heads, head_size)
-            heads = set(heads) - already_pruned_heads
-            if len(heads) == 0:
-                return heads, torch.zeros(0, 0).long()
-            for head in heads:
-                mask[head] = 0
-            mask = mask.view(-1).contiguous().eq(1)
-            index = torch.arange(len(mask))[mask].long()
-            return heads, index
+    if _embedding_model is not None:
+        return _embedding_model
 
-        _pytorch_utils.find_pruneable_heads_and_indices = (
-            find_pruneable_heads_and_indices
-        )
-
-    embedding_model = SentenceTransformer(
-        EMBEDDING_MODEL_NAME,
-        trust_remote_code=True
+    print(
+        "Loading embedding model..."
     )
 
-else:
+    try:
 
-    embedding_model = SentenceTransformer(
-        EMBEDDING_MODEL_NAME
+        if EMBEDDING_MODEL_PATH:
+
+            local_model_path = Path(
+                EMBEDDING_MODEL_PATH
+            ).expanduser()
+
+            if not local_model_path.exists():
+
+                raise RuntimeError(
+                    "Embedding model local path does not exist: "
+                    f"{local_model_path}"
+                )
+
+            if not local_model_path.is_dir():
+
+                raise RuntimeError(
+                    "Embedding model local path is not a directory: "
+                    f"{local_model_path}"
+                )
+
+            if EMBEDDING_MODEL_NAME == "jinaai/jina-embeddings-v2-base-code":
+
+                # Minimal compatibility shim:
+                # jina-embeddings-v2-base-code ships a custom modeling_bert.py that
+                # imports `find_pruneable_heads_and_indices`, which was removed in
+                # transformers>=5. Re-expose the legacy helper before loading.
+                import torch
+                import transformers.pytorch_utils as _pytorch_utils
+
+                if not hasattr(_pytorch_utils, "find_pruneable_heads_and_indices"):
+
+                    def find_pruneable_heads_and_indices(
+                        heads,
+                        n_heads,
+                        head_size,
+                        already_pruned_heads
+                    ):
+                        mask = torch.ones(n_heads, head_size)
+                        heads = set(heads) - already_pruned_heads
+                        if len(heads) == 0:
+                            return heads, torch.zeros(0, 0).long()
+                        for head in heads:
+                            mask[head] = 0
+                        mask = mask.view(-1).contiguous().eq(1)
+                        index = torch.arange(len(mask))[mask].long()
+                        return heads, index
+
+                    _pytorch_utils.find_pruneable_heads_and_indices = (
+                        find_pruneable_heads_and_indices
+                    )
+
+                _embedding_model = SentenceTransformer(
+                    str(local_model_path),
+                    trust_remote_code=True
+                )
+
+            else:
+
+                _embedding_model = SentenceTransformer(
+                    str(local_model_path)
+                )
+
+        elif EMBEDDING_MODEL_NAME == "jinaai/jina-embeddings-v2-base-code":
+
+            # Minimal compatibility shim:
+            # jina-embeddings-v2-base-code ships a custom modeling_bert.py that
+            # imports `find_pruneable_heads_and_indices`, which was removed in
+            # transformers>=5. Re-expose the legacy helper before loading.
+            import torch
+            import transformers.pytorch_utils as _pytorch_utils
+
+            if not hasattr(_pytorch_utils, "find_pruneable_heads_and_indices"):
+
+                def find_pruneable_heads_and_indices(
+                    heads,
+                    n_heads,
+                    head_size,
+                    already_pruned_heads
+                ):
+                    mask = torch.ones(n_heads, head_size)
+                    heads = set(heads) - already_pruned_heads
+                    if len(heads) == 0:
+                        return heads, torch.zeros(0, 0).long()
+                    for head in heads:
+                        mask[head] = 0
+                    mask = mask.view(-1).contiguous().eq(1)
+                    index = torch.arange(len(mask))[mask].long()
+                    return heads, index
+
+                _pytorch_utils.find_pruneable_heads_and_indices = (
+                    find_pruneable_heads_and_indices
+                )
+
+            _embedding_model = SentenceTransformer(
+                EMBEDDING_MODEL_NAME,
+                trust_remote_code=True
+            )
+
+        else:
+
+            _embedding_model = SentenceTransformer(
+                EMBEDDING_MODEL_NAME
+            )
+
+    except RuntimeError:
+        raise
+
+    except Exception as error:
+
+        if EMBEDDING_MODEL_PATH:
+
+            raise RuntimeError(
+                "Failed to load embedding model from local path "
+                f"'{EMBEDDING_MODEL_PATH}'. "
+                "The local path may be invalid or incomplete."
+            ) from error
+
+        raise RuntimeError(
+            "Failed to load embedding model "
+            f"'{EMBEDDING_MODEL_NAME}'. "
+            "The model may be missing from the local cache, or the network "
+            "may be unreachable."
+        ) from error
+
+    print(
+        "Embedding model loaded."
     )
 
-print(
-    "Embedding model loaded."
-)
+    return _embedding_model
 
 
 # ============================================================
@@ -419,6 +524,8 @@ def index_repository(
     for chunk in chunks
     ]
 
+    embedding_model = get_embedding_model()
+
     embeddings = (
         embedding_model.encode(
 
@@ -571,6 +678,8 @@ def vector_search_candidates(
         top_k,
         collection_size
     )
+
+    embedding_model = get_embedding_model()
 
     query_embedding = (
         embedding_model.encode(
